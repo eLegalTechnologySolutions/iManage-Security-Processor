@@ -28,7 +28,6 @@ object fSecurityProcessor: TfSecurityProcessor
     Database = 'WSC'
     Username = 'sa'
     Server = 'EUIMANSQL01.INCEGD.COM'
-    Connected = True
     LoginPrompt = False
     Left = 112
     Top = 8
@@ -95,7 +94,7 @@ object fSecurityProcessor: TfSecurityProcessor
   object rRequestPost: TRESTRequest
     Accept = '*/*'
     Client = RESTClient1
-    Method = rmPUT
+    Method = rmPOST
     Params = <>
     Response = rResponsePost
     SynchronizedEvents = False
@@ -107,6 +106,7 @@ object fSecurityProcessor: TfSecurityProcessor
     Top = 272
   end
   object rResponseGet: TRESTResponse
+    RootElement = 'data'
     Left = 304
     Top = 272
   end
