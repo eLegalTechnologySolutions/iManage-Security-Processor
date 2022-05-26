@@ -40,7 +40,6 @@ object fSecurityProcessor: TfSecurityProcessor
     Accept = '*/*'
     AcceptCharset = 'UTF-8, *;q=0.8'
     BaseURL = 'https://imancontrol.incegd.com/'
-    ContentType = 'application/json'
     Params = <>
     HandleRedirects = True
     RaiseExceptionOn500 = False
@@ -149,5 +148,19 @@ object fSecurityProcessor: TfSecurityProcessor
       'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39)
     Left = 240
     Top = 192
+  end
+  object rRequestPut: TRESTRequest
+    Accept = '*/*'
+    Client = RESTClient1
+    Method = rmPUT
+    Params = <>
+    Response = rResponsePut
+    SynchronizedEvents = False
+    Left = 392
+    Top = 284
+  end
+  object rResponsePut: TRESTResponse
+    Left = 472
+    Top = 280
   end
 end

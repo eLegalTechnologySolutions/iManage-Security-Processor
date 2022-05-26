@@ -25,6 +25,8 @@ type
     rRequestTest: TRESTRequest;
     rResponseTest: TRESTResponse;
     qGroupMembers: TUniQuery;
+    rRequestPut: TRESTRequest;
+    rResponsePut: TRESTResponse;
     procedure Button1Click(Sender: TObject);
 
   private
@@ -289,20 +291,46 @@ End;
 
 Function TfSecurityProcessor.UpdateWSGroup(fDBID : string; fWSID : string; fIWSID : string) : boolean;
 var
-  rGroupID : string;
+  rGroupID, rBodyHead, rBody : string;
 Begin
   Result := False;
   rGroupID := 'ePMS-' + fWSID;
   With qGroupMembers Do
   begin
-    Close; 
-    SQL.Text := 'select * ' +
+    Close;
+    SQL.Text := 'select distinct UserID ' +
                 'from wsc.dbo.el_ws_security_queue ' +
                 'where wsid = ' + QuotedStr(fWSID) +
-                'and Process_Code = ''ADD_U'' ' +
+                'and ProcessCode = ''ADD_U'' ' +
                 'and IsProcessed = ''N'' and Ignore = ''N'' ';
+    Open;
+    First;
+    if RecordCount > 0 then
+
+    rBodyHead :=  '{"database": "' + fDBID + '",' +
+              '"data_type": "users", ' +
+              '"data": [' +
+
+    rBody := '"' + FieldByName('UserID').AsString + '"';
+    Next;
+    while not EOF do
+    begin
+      rBody := rBody + ', "' + FieldByName('UserID').AsString + '"';
+      Next;
+    end;
+
+    rBody := rBody + '], "action": "add"}';
+    Close;
   end;
-  
+  rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
+  rRequestPost.Params.AddItem('body', rBodyHead + rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+  rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
+  rRequestPut.Execute;
+
+  if rResponsePost.StatusCode = 200 then
+    Result := True
+  else
+    Result := False;
   //  PUT /customers/{customerId}/libraries/{libraryId}/groups/{groupId}/members
 {
   "database": "ACTIVE_UK",
@@ -310,8 +338,7 @@ Begin
   "data": [
     "ACASE"
   ],
-  "action": "add",
-  "ds_members_hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+  "action": "add"
 }
 End;
 
@@ -324,6 +351,8 @@ Begin
     Result := '';
     rRequestPost.Resource :=  v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/workspaces/search';
     rbody := '{"filters": {"custom2": "' + fWSID + '"}}';
+    rRequestPost.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPost.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPost.Execute;
 
     if rResponsePost.StatusCode = 200 then
