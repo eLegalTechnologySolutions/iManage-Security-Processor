@@ -30,8 +30,8 @@ object fSecurityProcessor: TfSecurityProcessor
     Server = 'EUIMANSQL01.INCEGD.COM'
     Connected = True
     LoginPrompt = False
-    Left = 128
-    Top = 64
+    Left = 112
+    Top = 8
     EncryptedPassword = 
       '8CFF8BFF90FF8FFF83FFB2FFBEFFA6FFB0FFADFF83FF96FF91FF9BFF96FF9EFF' +
       '83FFBBFFB6FFADFFBAFFBCFFABFF'
@@ -45,7 +45,7 @@ object fSecurityProcessor: TfSecurityProcessor
     HandleRedirects = True
     RaiseExceptionOn500 = False
     Left = 40
-    Top = 48
+    Top = 72
   end
   object rRequestLogin: TRESTRequest
     Accept = '*/*'
@@ -63,19 +63,19 @@ object fSecurityProcessor: TfSecurityProcessor
     Resource = 'api/v1/session/login'
     Response = rResponseLogin
     SynchronizedEvents = False
-    Left = 40
-    Top = 144
+    Left = 112
+    Top = 72
   end
   object rResponseLogin: TRESTResponse
     ContentType = 'application/json'
-    Left = 128
-    Top = 144
+    Left = 192
+    Top = 72
   end
   object iManageSQLServer: TSQLServerUniProvider
-    Left = 256
+    Left = 24
     Top = 8
   end
-  object qGetJobs: TUniQuery
+  object qSecurityJobs: TUniQuery
     Connection = iManageConn
     SQL.Strings = (
       'select * '
@@ -83,5 +83,71 @@ object fSecurityProcessor: TfSecurityProcessor
       'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39)
     Left = 56
     Top = 216
+  end
+  object qSecurityJobDBs: TUniQuery
+    Connection = iManageConn
+    SQL.Strings = (
+      'select distinct dbid '
+      'from wsc.dbo.el_ws_security_queue'
+      'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39)
+    Left = 136
+    Top = 216
+  end
+  object rRequestPost: TRESTRequest
+    Accept = '*/*'
+    Client = RESTClient1
+    Method = rmPUT
+    Params = <>
+    Response = rResponsePost
+    SynchronizedEvents = False
+    Left = 40
+    Top = 276
+  end
+  object rResponsePost: TRESTResponse
+    Left = 128
+    Top = 272
+  end
+  object rResponseGet: TRESTResponse
+    Left = 304
+    Top = 272
+  end
+  object rRequestGet: TRESTRequest
+    Accept = '*/*'
+    Client = RESTClient1
+    Params = <>
+    Response = rResponseGet
+    SynchronizedEvents = False
+    Left = 216
+    Top = 276
+  end
+  object rRequestTest: TRESTRequest
+    Accept = '*/*'
+    Client = RESTClient1
+    Method = rmPOST
+    Params = <
+      item
+        name = 'body'
+        Value = '{"filters": {"custom2": "G.TES.4-93"}}'
+        ContentType = ctAPPLICATION_JSON
+      end>
+    Resource = 'work/api/v2/customers/1/libraries/eu_gdg_open/workspaces/search'
+    Response = rResponseTest
+    SynchronizedEvents = False
+    Left = 392
+    Top = 196
+  end
+  object rResponseTest: TRESTResponse
+    ContentType = 'application/json'
+    Left = 480
+    Top = 192
+  end
+  object qGroupMembers: TUniQuery
+    Connection = iManageConn
+    SQL.Strings = (
+      'select * '
+      'from wsc.dbo.el_ws_security_queue'
+      'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39)
+    Left = 240
+    Top = 192
   end
 end
