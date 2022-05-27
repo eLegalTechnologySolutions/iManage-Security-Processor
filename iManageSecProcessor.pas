@@ -100,7 +100,8 @@ Begin
       SQL.Clear;
 
       //Change query to group by PRJ_ID, wsq.ProcessCode, and wsq.DEFAULT_SECURITY_GROUP
-      SQL.Text := 'select wsq.*, p.PRJ_ID ' +
+      SQL.Text := //'select wsq.*, p.PRJ_ID ' +
+                  'select distinct wsq.wsid, wsq.ProcessCode, wsq.DEFAULT_SECURITY_GROUP, p.PRJ_ID ' +
                   'from ' + fDB + '.mhgroup.groups g ' +
                   'inner join wsc.dbo.EL_WS_Security_Queue wsq on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
                   'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ';
@@ -144,7 +145,8 @@ Begin
     begin
       Close;
       SQL.Clear;
-      SQL.Text := 'select wsq.*, p.PRJ_ID ' +
+      SQL.Text := //'select wsq.*, p.PRJ_ID ' +
+                  'select distinct wsq.wsid, wsq.ProcessCode, wsq.DEFAULT_SECURITY_GROUP, p.PRJ_ID ' +
                   'from el_ws_security_queue wsq ' +
                   'left join ' + fDB + '.mhgroup.groups g on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
                   'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
@@ -361,7 +363,7 @@ Begin
     rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPut.Execute;
 
-    if rResponsePost.StatusCode = 200 then
+    if rResponsePut.StatusCode = 200 then
       Result := True
     else
       Result := False;
