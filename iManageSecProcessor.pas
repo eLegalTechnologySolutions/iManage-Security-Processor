@@ -27,6 +27,7 @@ type
     qGroupMembers: TUniQuery;
     rRequestPut: TRESTRequest;
     rResponsePut: TRESTResponse;
+    qUpdateQueue: TUniQuery;
     procedure Button1Click(Sender: TObject);
 
   private
@@ -42,6 +43,7 @@ type
     Function UpdateWSGroup(fDBID : string; fWSID : string; fIWSID : string) : boolean;
     Function GetWorkspaceID(fDBID : string; fWSID : string) : string;
     Function EnableWSGroup(fDBID : string; fGroupID : string) : boolean;
+    procedure UpdateSecurityQueue(pDBID : string; pWSID : string; pUserID : string; pProcessCode : string; pYorN : string);
 
   public
     { Public declarations }
@@ -80,8 +82,8 @@ Begin
     qSecurityJobDBs.Open;
     while not qSecurityJobDBs.Eof do
     begin
-      ProcessExistingGroups(qSecurityJobDBs.FieldByName('DBID').AsString);
       ProcessNewGroups(qSecurityJobDBs.FieldByName('DBID').AsString);
+      ProcessExistingGroups(qSecurityJobDBs.FieldByName('DBID').AsString);
       qSecurityJobDBs.Next;
     end;
 
@@ -104,7 +106,8 @@ Begin
                   'select distinct wsq.wsid, wsq.ProcessCode, wsq.DEFAULT_SECURITY_GROUP, p.PRJ_ID ' +
                   'from ' + fDB + '.mhgroup.groups g ' +
                   'inner join wsc.dbo.EL_WS_Security_Queue wsq on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
-                  'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ';
+                  'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
+                  'where wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ';
       Open;
       while not EOF do
       begin
@@ -113,12 +116,17 @@ Begin
         if FieldByName('ProcessCode').AsString = 'REMOVE_WS' then
         begin
           //Remove Restricted group and add default entity security group
-          RemoveWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID);
-          AddWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID);
+          If RemoveWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID) and
+            AddWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID) Then
+            UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'REMOVE_WS', 'Y')
+          Else UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'REMOVE_WS', 'N');
         end
         else if FieldByName('ProcessCode').AsString = 'ADD_WS' then
           //Add existing group to workspace
-          AddWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID)
+          if RemoveWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID) and
+            AddWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID) Then
+            UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'Y')
+          Else UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'N')
         else if (FieldByName('ProcessCode').AsString = 'ADD_U') or
                 (FieldByName('ProcessCode').AsString = 'REMOVE_U') then
         begin
@@ -151,7 +159,8 @@ Begin
                   'left join ' + fDB + '.mhgroup.groups g on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
                   'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
                   'where g.GROUPID is null ' +
-                  'and ProcessCode = ''ADD_WS'' ';
+                  'and wsq.ProcessCode = ''ADD_WS'' ' +
+                  'and wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ';
 
       Open;
       while not EOF do
@@ -159,8 +168,10 @@ Begin
         CurrWorkspaceID := '';
         CurrWorkspaceID := fDB + '!' + FieldByName('PRJ_ID').AsString;
         //Remove default entity security group and add Restricted group
-        RemoveWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID);
-        AddWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID);
+        If RemoveWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID) and
+        AddWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID) Then
+          UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'Y')
+        else UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'N');
         //Add user(s) to new group
         Next;
       end;
@@ -200,7 +211,7 @@ Begin
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPost.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPost.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPost.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPost.Execute;
 
@@ -262,7 +273,7 @@ Begin
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPost.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPost.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPost.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPost.Execute;
 
@@ -298,7 +309,7 @@ Begin
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPost.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPost.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPost.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPost.Execute;
 
@@ -322,11 +333,14 @@ End;
 
 Function TfSecurityProcessor.UpdateWSGroup(fDBID : string; fWSID : string; fIWSID : string) : boolean;
 var
-  rGroupID, rBodyHead, rBody, rFullBody : string;
+  rGroupID, rBodyHead, rBody, rFullBody, UserList : string;
 Begin
   Result := False;
   rGroupID := 'ePMS-' + fWSID;
   try
+    rBody := '';
+    rFullBody := '';
+    UserList := '';
     With qGroupMembers Do
     begin
       Close;
@@ -344,10 +358,12 @@ Begin
                 '"data": [';
 
       rBody := '"' + FieldByName('UserID').AsString + '"';
+      UserList := Quotedstr(FieldByName('UserID').AsString);
       Next;
       while not EOF do
       begin
         rBody := rBody + ', "' + FieldByName('UserID').AsString + '"';
+        UserList := UserList + ', ' + QuotedStr(FieldByName('UserID').AsString);
         Next;
       end;
 
@@ -359,17 +375,27 @@ Begin
     rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
     rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
-    rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPut.Execute;
 
     if rResponsePut.StatusCode = 200 then
-      Result := True
+    begin
+      //Update el_ws_security_queue to IsProcessed = 'Y'
+      UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'Y');
+      Result := True;
+    end
     else
+    begin
       Result := False;
+      UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'N');
+    end;
 
   except on E: Exception do
-    Result := False;
+    begin
+      Result := False;
+      UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'N');
+    end;
   end;
   //  PUT /customers/{customerId}/libraries/{libraryId}/groups/{groupId}/members
 {
@@ -383,6 +409,7 @@ Begin
   try
     rBody := '';
     rFullBody := '';
+    UserList := '';
     With qGroupMembers Do
     begin
       Close;
@@ -401,11 +428,13 @@ Begin
                   '"data": [';
 
         rBody := '"' + FieldByName('UserID').AsString + '"';
+        UserList := QuotedStr(FieldByName('UserID').AsString);
         Next;
 
         while not EOF do
         begin
           rBody := rBody + ', "' + FieldByName('UserID').AsString + '"';
+          UserList := UserList + ', ' + QuotedStr(FieldByName('UserID').AsString);
           Next;
         end;
 
@@ -417,18 +446,27 @@ Begin
         rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
         rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
-        rRequestPost.Params.AddItem('body', rFullBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+        rRequestPost.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
         rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
         rRequestPut.Execute;
 
         if rResponsePost.StatusCode = 200 then
-          Result := True
+        begin
+          //Update el_ws_security_queue to IsProcessed = 'Y'
+          UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'Y');
+          Result := True;
+        end
         else
+          //Update el_ws_security_queue to IsProcessed = 'N' DateProcessed = GetDate()
           Result := False;
+          UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'N');
       end;
     end;
   except on E: Exception do
-    Result := False;
+    begin
+      Result := False;
+      UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'N');
+    end;
   end;
 
   //ENSURE GROUP IS ENABLED.
@@ -444,7 +482,7 @@ Begin
     Result := '';
     rRequestPost.Resource :=  v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/workspaces/search';
     rbody := '{"filters": {"custom2": "' + fWSID + '"}}';
-    rRequestPost.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPost.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPost.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPost.Execute;
 
@@ -480,7 +518,7 @@ Begin
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPut.Params.AddItem('body', rBody, TRESTRequestPArameterKind.pkREQUESTBODY);
+    rRequestPut.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPut.Execute;
 
@@ -493,6 +531,40 @@ Begin
 
   except on E: Exception do
     Result := False;
+  end;
+End;
+
+procedure TfSecurityProcessor.UpdateSecurityQueue(pDBID : string; pWSID : string; pUserID : string; pProcessCode : string; pYorN : string);
+Begin
+  try
+    With qUpdateQueue Do
+    begin
+      Close;
+      SQL.Clear;
+      SQL.Text := 'Update wsc.dbo.el_ws_security_queue ' +
+                  //'Set IsProcessed = :YorN, ' +
+                  'Set IsProcessed = ' + quotedstr(pYorN) +
+                  ', DateProcessed = GetDate() ' +
+                  //'where DBID = :DBID ' +
+                  'where DBID = ' + quotedstr(pDBID) +
+                  //'and WSID = :WSID ' +
+                  ' and WSID = ' + quotedstr(pWSID) +
+                  ' and isnull(UserID, ''XNULL'') in (' +
+                  pUserID + ') ' +
+                  //'and ProcessCode := :ProcessCode ' +
+                  ' and ProcessCode = ' + quotedstr(pProcessCode) +
+                  ' and IsProcessed = ''N'' ' +
+                  ' and Ignore = ''N'' ';
+
+      //ParamByName('DBID').AsString := pDBID;
+      //ParamByName('WSID').AsString := pWSID;
+//      ParamByName('UserID').AsString := pUserID;
+      //ParamByName('ProcessCode').AsString := pProcessCode;
+      //ParamByName('YorN').AsString := pYorN;
+      Execute;
+    end;
+
+  except on E: Exception do
   end;
 End;
 

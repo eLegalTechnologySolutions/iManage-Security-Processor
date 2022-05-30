@@ -76,9 +76,15 @@ object fSecurityProcessor: TfSecurityProcessor
   object qSecurityJobs: TUniQuery
     Connection = iManageConn
     SQL.Strings = (
+      'select distinct dbid '
+      'from wsc.dbo.el_ws_security_queue'
+      'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39
+      ''
+      '/*'
       'select * '
       'from wsc.dbo.el_ws_security_queue'
-      'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39)
+      'where IsProcessed = '#39'N'#39' and Ignore = '#39'N'#39
+      '*/')
     Left = 56
     Top = 216
   end
@@ -162,5 +168,48 @@ object fSecurityProcessor: TfSecurityProcessor
   object rResponsePut: TRESTResponse
     Left = 472
     Top = 280
+  end
+  object qUpdateQueue: TUniQuery
+    Connection = iManageConn
+    SQL.Strings = (
+      'Update wsc.dbo.el_ws_security_queue'
+      'Set IsProcessed = :YorN, '
+      '    DateProcessed = GetDate()'
+      'where DBID = :DBID'
+      'and   WSID = :WSID'
+      'and   isnull(UserID, '#39'XNULL'#39') in (:UserID)'
+      'and   ProcessCode := :ProcessCode'
+      'and IsProcessed = '#39'N'#39
+      'and Ignore = '#39'N'#39
+      ''
+      '')
+    Left = 496
+    Top = 128
+    ParamData = <
+      item
+        DataType = ftUnknown
+        Name = 'YorN'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DBID'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'WSID'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'UserID'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ProcessCode'
+        Value = nil
+      end>
   end
 end
