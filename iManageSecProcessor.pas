@@ -28,7 +28,9 @@ type
     rRequestPut: TRESTRequest;
     rResponsePut: TRESTResponse;
     qUpdateQueue: TUniQuery;
+    Button2: TButton;
     procedure Button1Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
 
   private
     { Private declarations }
@@ -44,6 +46,7 @@ type
     Function GetWorkspaceID(fDBID : string; fWSID : string) : string;
     Function EnableWSGroup(fDBID : string; fGroupID : string) : boolean;
     procedure UpdateSecurityQueue(pDBID : string; pWSID : string; pUserID : string; pProcessCode : string; pYorN : string);
+    procedure FixWS();
 
   public
     { Public declarations }
@@ -57,13 +60,18 @@ const
 
 implementation
 uses
-  system.json, REST.Types, system.strutils;
+  system.json, REST.Types, system.strutils, REST.Utils, REST.HTTPClient;
 
 {$R *.dfm}
 
 procedure TfSecurityProcessor.Button1Click(Sender: TObject);
 begin
   ProcessSecurity;
+end;
+
+procedure TfSecurityProcessor.Button2Click(Sender: TObject);
+begin
+  FixWS;
 end;
 
 procedure TfSecurityProcessor.ProcessSecurity();
@@ -107,7 +115,8 @@ Begin
                   'from ' + fDB + '.mhgroup.groups g ' +
                   'inner join wsc.dbo.EL_WS_Security_Queue wsq on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
                   'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
-                  'where wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ';
+                  'where wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ' +
+                  'order by wsq.wsid';
       Open;
       while not EOF do
       begin
@@ -160,7 +169,8 @@ Begin
                   'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
                   'where g.GROUPID is null ' +
                   'and wsq.ProcessCode = ''ADD_WS'' ' +
-                  'and wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ';
+                  'and wsq.IsProcessed = ''N'' and wsq.Ignore = ''N'' ' +
+                  'order by wsq.wsid';
 
       Open;
       while not EOF do
@@ -170,28 +180,14 @@ Begin
         //Remove default entity security group and add Restricted group
         If RemoveWSGroup(fDB, FieldByName('DEFAULT_SECURITY_GROUP').AsString, CurrWorkspaceID) and
         AddWSGroup(fDB, 'ePMS-' + FieldByName('WSID').AsString, CurrWorkspaceID) Then
-          UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'Y')
+          begin
+            UpdateWSGroup(fDB, FieldByName('WSID').AsString, CurrWorkspaceID);
+            UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'Y')
+          end
+
         else UpdateSecurityQueue(fDB, FieldByName('WSID').AsString, quotedstr('XNULL'), 'ADD_WS', 'N');
-        //Add user(s) to new group
         Next;
       end;
-
-  {    Close;
-      SQL.Clear;
-      SQL.Text := 'select * ' +
-                  'from el_ws_security_queue wsq ' +
-                  'left join ' + fDB + '.mhgroup.groups g on g.GROUPID = ''ePMS-'' + wsq.wsid ' +
-                  'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid ' +
-                  'where g.GROUPID is null ' +
-                  'and ProcessCode = ''ADD_U'' ';
-
-      Open;
-      while not EOF do
-      begin
-        //Add user(s) to new group
-
-      end;
-   }
     end;
 
   except on E: Exception do
@@ -235,12 +231,19 @@ Begin
   try
     Result := False;
     rGroupID := '';
-    rRequestGet.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups?alias=' + fGroupID;
+    //rRequestGet.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups?alias=' + fGroupID;
+    rRequestGet.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups';
+    rRequestGet.AddParameter('alias', fGroupID, TRESTRequestParameterKind.pkGETorPOST);
+    //rRequestTest.Params.AddItem('alias', fGroupID, TRESTRequestParameterKind.pkGetorPost);
     rRequestGet.Execute;
     if rResponseGet.StatusCode = 200 then
     begin
-      Group_JSONArray := rResponseGet.JSONValue as TJSONArray;
-      rGroupID := ((Group_JSONArray as TJSONArray).Items[0] as TJSonObject).Get('group_id').JSONValue.Value;
+      if rResponseGet.ContentLength > 16 then
+      begin
+        Group_JSONArray := rResponseGet.JSONValue as TJSONArray;
+        rGroupID := ((Group_JSONArray as TJSONArray).Items[0] as TJSonObject).Get('group_id').JSONValue.Value;
+      end
+      else rGroupID := '';
       if rGroupID <> '' then
         Result := True
       else
@@ -302,7 +305,7 @@ Begin
     if not GetWSGroup(fDBID, fGroupID) then
       if not CreateWSGroup(fDBID, fGroupID) then
         exit;
-        
+
     rRequestPost.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/workspaces/' + fIWSID + '/security';
     rBody := '{"default_security": "private", "include" :[{"id"  : "' + fGroupID + '", "access_level" : "full_access", "type" : "group"}]}';
 
@@ -374,7 +377,9 @@ Begin
     rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
     rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
+    //rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
+    rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
+    rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
     rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPut.Execute;
@@ -445,7 +450,9 @@ Begin
         rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
         rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
-        rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
+        //rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + rGroupID + '/members';
+        rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
+        rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
         rRequestPost.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
         rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
         rRequestPut.Execute;
@@ -508,7 +515,8 @@ Begin
   exit;
   try
     Result := False;
-    rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + fGroupID;
+    //rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/' + fGroupID;
+    rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/{fDBID}/groups/{fGroupID}';
     rBody :=  '{"enabled": true, ' +
                 '"full_name": "ePMS Ethical Wall Group", ' +
                 '"group_nos": 2, ' +
@@ -518,6 +526,8 @@ Begin
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
 
+    rRequestPut.Params.AddItem('fDBID', fDBID, TRESTRequestParameterKind.pkURLSEGMENT);
+    rRequestPut.Params.AddItem('fGroupID', fGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
     rRequestPut.Params.AddItem('body', rBody, TRESTRequestParameterKind.pkREQUESTBODY);
     rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
     rRequestPut.Execute;
@@ -567,5 +577,68 @@ Begin
   except on E: Exception do
   end;
 End;
+
+
+procedure TfSecurityProcessor.FixWS();
+var
+  LogonJSONObject : TJSONObject;
+  CurrWorkspaceID, fDB : string;
+Begin
+  rRequestLogin.Execute;
+  if rResponseLogin.StatusCode = 200 then
+  begin
+    CurrCustomerID := '';
+    LogonJSONObject := rResponseLogin.JSONValue as TJSONObject;
+    CurrCustomerID := LogonJSONObject.GetValue('customer_id').Value;
+    //ShowMessage(CurrCustomerID);
+
+//    qSecurityJobDBs.Close;
+//    qSecurityJobDBs.Open;
+//    while not qSecurityJobDBs.Eof do
+//    begin
+      //ProcessNewGroups(qSecurityJobDBs.FieldByName('DBID').AsString);
+//      ProcessExistingGroups(qSecurityJobDBs.FieldByName('DBID').AsString);
+//      qSecurityJobDBs.Next;
+
+      try
+        //Result := False;
+        fDB := 'EU_GDG_OPEN';
+        With qSecurityJobs Do
+        begin
+          Close;
+          SQL.Clear;
+
+          //Change query to group by PRJ_ID, wsq.ProcessCode, and wsq.DEFAULT_SECURITY_GROUP
+          SQL.Text := //'select wsq.*, p.PRJ_ID ' +
+                      'select distinct wsq.wsid, wsq.ProcessCode, wsq.DEFAULT_SECURITY_GROUP, p.PRJ_ID ' +
+                      'from ' + fDB + '.mhgroup.groups g ' +
+                      'inner join wsc.dbo.EL_WS_Security_Queue wsq on g.GROUPID = ''ePMS-'' + wsq.wsid collate database_default ' +
+                      'inner join ' + fDB + '.mhgroup.projects p on p.CUSTOM1 = wsq.wsid collate database_default ' +
+                      'where wsq.IsProcessed = ''Y'' and wsq.Ignore = ''N'' and processcode = ''ADD_WS'' ' +
+                      'order by wsq.wsid';
+          Open;
+          while not EOF do
+          begin
+            CurrWorkspaceID := '';
+            CurrWorkspaceID := fDB + '!' + FieldByName('PRJ_ID').AsString;
+            //if FieldByName('ProcessCode').AsString = 'REMOVE_WS' then
+            //begin
+              //Add user(s) to / remove user(s) from existing group
+              UpdateWSGroup(fDB, FieldByName('WSID').AsString, CurrWorkspaceID);
+           // end;
+
+            Next;
+          end;
+
+        end;
+
+      except on E: Exception do
+      end;
+
+    end;
+
+  //end;
+
+end;
 
 end.

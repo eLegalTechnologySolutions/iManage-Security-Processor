@@ -22,6 +22,15 @@ object fSecurityProcessor: TfSecurityProcessor
     TabOrder = 0
     OnClick = Button1Click
   end
+  object Button2: TButton
+    Left = 544
+    Top = 48
+    Width = 75
+    Height = 25
+    Caption = 'Fix 1st WS'
+    TabOrder = 1
+    OnClick = Button2Click
+  end
   object iManageConn: TUniConnection
     ProviderName = 'SQL Server'
     Port = 1433
@@ -29,7 +38,7 @@ object fSecurityProcessor: TfSecurityProcessor
     Username = 'sa'
     Server = 'EUIMANSQL01.INCEGD.COM'
     LoginPrompt = False
-    Left = 112
+    Left = 136
     Top = 8
     EncryptedPassword = 
       '8CFF8BFF90FF8FFF83FFB2FFBEFFA6FFB0FFADFF83FF96FF91FF9BFF96FF9EFF' +
@@ -39,6 +48,7 @@ object fSecurityProcessor: TfSecurityProcessor
     Accept = '*/*'
     AcceptCharset = 'UTF-8, *;q=0.8'
     BaseURL = 'https://imancontrol.incegd.com/'
+    ContentType = 'application/json'
     Params = <>
     HandleRedirects = True
     RaiseExceptionOn500 = False
@@ -54,8 +64,8 @@ object fSecurityProcessor: TfSecurityProcessor
         Kind = pkREQUESTBODY
         name = 'body'
         Value = 
-          '{'#10'"user_id" : "epmsdev",'#10'"password" : "newyork",'#10'"persona" : "us' +
-          'er",'#10'"application_name" : "ePMS"'#10'}'
+          '{'#10'"user_id" : "epmsdev",'#10'"password" : "newyork",'#10'"persona" : "ad' +
+          'min",'#10'"application_name" : "ePMS"'#10'}'
         ContentType = ctAPPLICATION_JSON
       end>
     Resource = 'api/v1/session/login'
@@ -70,7 +80,7 @@ object fSecurityProcessor: TfSecurityProcessor
     Top = 72
   end
   object iManageSQLServer: TSQLServerUniProvider
-    Left = 24
+    Left = 40
     Top = 8
   end
   object qSecurityJobs: TUniQuery
@@ -131,11 +141,14 @@ object fSecurityProcessor: TfSecurityProcessor
     Method = rmPOST
     Params = <
       item
+        Kind = pkREQUESTBODY
         name = 'body'
-        Value = '{"filters": {"custom2": "G.TES.4-93"}}'
+        Value = 
+          '{"enabled": true, "full_name": "ePMS Ethical Wall Group", "group' +
+          '_nos": 2, "id": "ePMS-G.NKG.1-14", "is_external": false }'
         ContentType = ctAPPLICATION_JSON
       end>
-    Resource = 'work/api/v2/customers/1/libraries/eu_gdg_open/workspaces/search'
+    Resource = 'work/api/v2/customers/1/libraries/EU_GDG_OPEN/groups'
     Response = rResponseTest
     SynchronizedEvents = False
     Left = 392
