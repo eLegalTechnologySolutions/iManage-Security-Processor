@@ -11,6 +11,7 @@ object fSecurityProcessor: TfSecurityProcessor
   Font.Name = 'Tahoma'
   Font.Style = []
   OldCreateOrder = False
+  OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 13
   object Button1: TButton
@@ -29,7 +30,17 @@ object fSecurityProcessor: TfSecurityProcessor
     Height = 25
     Caption = 'Fix 1st WS'
     TabOrder = 1
+    Visible = False
     OnClick = Button2Click
+  end
+  object Button3: TButton
+    Left = 528
+    Top = 120
+    Width = 99
+    Height = 25
+    Caption = 'Enable WS Group'
+    TabOrder = 2
+    OnClick = Button3Click
   end
   object iManageConn: TUniConnection
     ProviderName = 'SQL Server'
