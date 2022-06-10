@@ -34,6 +34,7 @@ type
     procedure Button2Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure Button3Click(Sender: TObject);
+    procedure FormShow(Sender: TObject);
 
   private
     { Private declarations }
@@ -345,52 +346,58 @@ Begin
     With qGroupMembers Do
     begin
       Close;
-      SQL.Text := 'select distinct UserID ' +
-                  'from wsc.dbo.el_ws_security_queue ' +
-                  'where wsid = ' + QuotedStr(fWSID) +
-                  'and ProcessCode = ''ADD_U'' ' +
-                  'and IsProcessed = ''N'' and Ignore = ''N'' ';
+      SQL.Text := 'select distinct sq.UserID ' +
+                  'from wsc.dbo.el_ws_security_queue sq ' +
+                  'inner join ' + fDBID + '.MHGROUP.DOCUSERS du on du.userid = sq.userid collate database_default ' +
+                  'where sq.wsid = ' + QuotedStr(fWSID) +
+                  ' and sq.ProcessCode = ''ADD_U'' ' +
+                  'and sq.IsProcessed = ''N'' and sq.Ignore = ''N'' ';
       Open;
       First;
       if RecordCount > 0 then
-
-      rBodyHead :=  '{"database": "' + fDBID + '",' +
-                '"data_type": "users", ' +
-                '"data": [';
-
-      rBody := '"' + FieldByName('UserID').AsString + '"';
-      UserList := Quotedstr(FieldByName('UserID').AsString);
-      Next;
-      while not EOF do
       begin
-        rBody := rBody + ', "' + FieldByName('UserID').AsString + '"';
-        UserList := UserList + ', ' + QuotedStr(FieldByName('UserID').AsString);
-        Next;
-      end;
+        rBodyHead :=  '{"database": "' + fDBID + '",' +
+                  '"data_type": "users", ' +
+                  '"data": [';
 
-      rBody := rBody + '], "action": "add"}';
+        rBody := '"' + FieldByName('UserID').AsString + '"';
+        UserList := Quotedstr(FieldByName('UserID').AsString);
+        Next;
+        while not EOF do
+        begin
+          rBody := rBody + ', "' + FieldByName('UserID').AsString + '"';
+          UserList := UserList + ', ' + QuotedStr(FieldByName('UserID').AsString);
+          Next;
+        end;
+
+        rBody := rBody + '], "action": "add"}';
+      end;
       Close;
     end;
-    rFullBody := rBodyHead + rBody;
-    rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
-    rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
-    rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
-    rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
-    rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
-    rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
-    rRequestPut.Execute;
+    if UserList <> '' then
+    begin
+      rFullBody := rBodyHead + rBody;
+      rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
+      rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
 
-    if rResponsePut.StatusCode = 200 then
-    begin
-      //Update el_ws_security_queue to IsProcessed = 'Y'
-      UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'Y');
-      Result := True;
-    end
-    else
-    begin
-      Result := False;
-      UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'N');
+      rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
+      rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
+      rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
+      rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
+      rRequestPut.Execute;
+
+      if rResponsePut.StatusCode = 200 then
+      begin
+        //Update el_ws_security_queue to IsProcessed = 'Y'
+        UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'Y');
+        Result := True;
+      end
+      else
+      begin
+        Result := False;
+        UpdateSecurityQueue(fDBID, fWSID, UserList, 'ADD_U', 'N');
+      end;
     end;
 
   except on E: Exception do
@@ -407,12 +414,13 @@ Begin
     With qGroupMembers Do
     begin
       Close;
-      SQL.Text := 'select distinct UserID ' +
-                  'from wsc.dbo.el_ws_security_queue ' +
-                  'where wsid = ' + QuotedStr(fWSID) +
-                  'and ProcessCode = ''REMOVE_U'' ' +
-                  'and IsProcessed = ''N'' and Ignore = ''N'' ' +
-                  'and UserID is not null';
+      SQL.Text := 'select distinct sq.UserID ' +
+                  'from wsc.dbo.el_ws_security_queue sq ' +
+                  'inner join ' + fDBID + '.MHGROUP.DOCUSERS du on du.userid = sq.userid collate database_default ' +
+                  'where sq.wsid = ' + QuotedStr(fWSID) +
+                  ' and sq.ProcessCode = ''REMOVE_U'' ' +
+                  'and sq.IsProcessed = ''N'' and sq.Ignore = ''N'' ' +
+                  'and sq.UserID is not null';
       Open;
       First;
       if not EOF then
@@ -435,29 +443,33 @@ Begin
         rBody := rBody + '], "action": "delete"}';
         Close;
 
-        rFullBody := rBodyHead + rBody;
-        rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
-        rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
-
-        rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
-        rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
-        rRequestPost.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
-        rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
-        rRequestPut.Execute;
-
-        if rResponsePost.StatusCode = 200 then
+        if UserList <> '' then
         begin
-          //Update el_ws_security_queue to IsProcessed = 'Y'
-          UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'Y');
-          Result := True;
-        end
-        else
-        begin
-          Result := False;
-          UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'N');
+          rFullBody := rBodyHead + rBody;
+          rFullBody := StringReplace(rFullBody,#$A,'',[rfReplaceAll]);
+          rFullBody := StringReplace(rFullBody,#$D,'',[rfReplaceAll]);
+
+          rRequestPut.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/groups/{rGroupID}/members';
+          rRequestPut.Params.AddItem('rGroupID', rGroupID, TRESTRequestParameterKind.pkURLSEGMENT);
+          rRequestPut.Params.AddItem('body', rFullBody, TRESTRequestParameterKind.pkREQUESTBODY);
+          rRequestPut.Params.ParameterByName('body').ContentType := ctAPPLICATION_JSON;
+          rRequestPut.Execute;
+
+          if rResponsePut.StatusCode = 200 then
+          begin
+            //Update el_ws_security_queue to IsProcessed = 'Y'
+            UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'Y');
+            Result := True;
+          end
+          else
+          begin
+            Result := False;
+            UpdateSecurityQueue(fDBID, fWSID, UserList, 'REMOVE_U', 'N');
+          end;
         end;
       end;
     end;
+
   except on E: Exception do
     begin
       Result := False;
@@ -604,7 +616,18 @@ end;
 
 procedure TfSecurityProcessor.FormCreate(Sender: TObject);
 begin
-  ProcessSecurity;
+  ///
+end;
+
+procedure TfSecurityProcessor.FormShow(Sender: TObject);
+begin
+{
+  try
+    ProcessSecurity;
+    Close;
+  except on E: Exception do
+  end;
+ }
 end;
 
 end.
