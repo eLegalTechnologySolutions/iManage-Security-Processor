@@ -309,7 +309,7 @@ Begin
         exit;
 
     rRequestPost.Resource := v2APIBase + CurrCustomerID + '/libraries/' + fDBID + '/workspaces/' + fIWSID + '/security';
-    rBody := '{"default_security": "private", "include" :[{"id"  : "' + fGroupID + '", "access_level" : "full_access", "type" : "group"}]}';
+    rBody := '{"default_security": "private", "include" :[{"id"  : "' + fGroupID + '", "access_level" : "read_write", "type" : "group"}]}';
 
     rBody := StringReplace(rBody,#$A,'',[rfReplaceAll]);
     rBody := StringReplace(rBody,#$D,'',[rfReplaceAll]);
@@ -621,13 +621,13 @@ end;
 
 procedure TfSecurityProcessor.FormShow(Sender: TObject);
 begin
-{
+
   try
     ProcessSecurity;
     Close;
   except on E: Exception do
   end;
- }
+
 end;
 
 end.
